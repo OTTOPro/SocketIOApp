@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.1/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.1/theme/material.min.css">
+    <script>
+        const socket = io();
+    </script>
+</head>
+
+<body>
+    <textarea id="editor"></textarea>
+
+    <!-- Inclure le fichier JavaScript de CodeMirror -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.1/codemirror.min.js"></script>
+    <!-- Inclure le mode JavaScript pour la coloration syntaxique -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.1/mode/javascript/javascript.min.js"></script>
+
+    <script>
+        var editor = CodeMirror.fromTextArea(document.getElementById("editor"), {
+            lineNumbers: true,
+            mode: "javascript",
+            theme: "material"
+        });
+    
+        var ignoreChangeEvent = false; // Ajoutez cette variable pour suivre l'état de l'événement
+    
+        editor.on("change", function () {
+            if (!ignoreChangeEvent) { // Vérifiez si l'événement doit être ignoré
+                const code = editor.getValue();
+                socket.emit('codeChange', code);
+            }
+        });
+    
+        socket.on('codeChange', function (data) {
+            if (socket.id !== data.senderId) {
+                ignoreChangeEvent = true; // Désactivez temporairement la gestion des événements
+                editor.setValue(data.code);
+                ignoreChangeEvent = false; // Réactivez la gestion des événements après la mise à jour
+            }
+        });
+    </script>
+    
+
+</body>
+
+</html>
