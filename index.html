@@ -10,10 +10,36 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.1/theme/material.min.css">
     <script>
         const socket = io();
+
+        let roomId; // Variable pour stocker l'identifiant de la salle
+        function toggleRoom() {
+            if (roomId) {
+                socket.emit('leaveRoom', roomId);
+                roomId = null;
+                document.getElementById("roomButton").innerText = "Joindre une salle";
+            } else {
+                roomId = prompt("Entrez l'id de la salle:");
+                if (roomId) { // Vérifier si un identifiant de salle a été saisi
+                    socket.emit('joinRoom', roomId);
+                    document.getElementById("roomButton").innerText = "Quitter une salle";
+                }
+            }
+        }
     </script>
+     <style>
+        h1, h2 {
+            text-align: center;
+        }
+    </style>
 </head>
 
 <body>
+    <h1>Collaboration en temps réel</h1> 
+    <h2>Avec Socket.IO et Node.js</h2>
+    <div>
+        <button id="roomButton" onclick="toggleRoom()">Joindre une salle</button>
+    </div>
+    <div id="clientId"></div>
     <textarea id="editor"></textarea>
 
     <!-- Inclure le fichier JavaScript de CodeMirror -->
@@ -28,21 +54,25 @@
             theme: "material"
         });
     
-        var ignoreChangeEvent = false; // Ajoutez cette variable pour suivre l'état de l'événement
+        var ignoreChangeEvent = false; // On ajoute cette variable pour suivre l'état de l'événement
     
         editor.on("change", function () {
-            if (!ignoreChangeEvent) { // Vérifiez si l'événement doit être ignoré
+            if (!ignoreChangeEvent) { // On verifie si l'événement doit être ignoré
                 const code = editor.getValue();
-                socket.emit('codeChange', code);
+                socket.emit('codeChange', { code: code, roomId: roomId });
             }
         });
-    
+        
         socket.on('codeChange', function (data) {
-            if (socket.id !== data.senderId) {
-                ignoreChangeEvent = true; // Désactivez temporairement la gestion des événements
+            if (socket.id !== data.senderId && data.roomId === roomId || !data.roomId) {
+                ignoreChangeEvent = true; // on desactive temporairement la gestion des événements
                 editor.setValue(data.code);
-                ignoreChangeEvent = false; // Réactivez la gestion des événements après la mise à jour
+                ignoreChangeEvent = false; // on reactive la gestion des événements après la mise à jour
             }
+        });
+
+        socket.on('connect', function() {
+            document.getElementById('clientId').innerText = 'Votre ID: ' + socket.id;
         });
     </script>
     
