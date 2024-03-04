@@ -4,14 +4,63 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Client</title>
+    <title>OTTOCOLAB</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/6.26.0/babel.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.1/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.1/theme/material.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@latest/min/vs/loader.js"></script>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        h1, h2 {
+            text-align: center;
+        }
+
+        #editor {
+            width: 100%;
+            height: 80vh;
+        }
+      
+        #output {
+            background-color: black;
+            color: white;
+            font-family: 'Courier New', Courier, monospace;
+            padding: 10px;
+            overflow-y: scroll; 
+            max-height: 200px; 
+        }
+    </style>
+</head>
+
+<body>
+    <h1>OTTOCOLAB</h1>
+    <h2>Collaboration en temps réel avec Socket.IO et Node.js</h2>
+    <h2>Apprendre et s'habituer avec javascript</h2>
+    <div class="container text-center">
+        <button id="roomButton" class="btn btn-primary" onclick="toggleRoom()">Joindre une salle</button>
+    </div>
+    <br>
+    <br>
+    <div id="clientId"></div>
+    <br>
+    <br>
+    <div id="editor">
+    </div>
+    <br>
+    <div class="container">
+        <div class="text-center mt-3">
+            <button class="btn btn-primary" onclick="compileCode()">Compiler le code</button>
+        </div>
+    </div>
+    <br>
+    <div id="output">
+         
+    </div>
+
     <script>
         const socket = io();
 
-        let roomId; // Variable pour stocker l'identifiant de la salle
+        let roomId; 
+        let editor; 
+
         function toggleRoom() {
             if (roomId) {
                 socket.emit('leaveRoom', roomId);
@@ -19,64 +68,102 @@
                 document.getElementById("roomButton").innerText = "Joindre une salle";
             } else {
                 roomId = prompt("Entrez l'id de la salle:");
-                if (roomId) { // Vérifier si un identifiant de salle a été saisi
+                if (roomId) { 
                     socket.emit('joinRoom', roomId);
                     document.getElementById("roomButton").innerText = "Quitter une salle";
                 }
             }
         }
-    </script>
-     <style>
-        h1, h2 {
-            text-align: center;
-        }
-    </style>
-</head>
 
-<body>
-    <h1>Collaboration en temps réel</h1> 
-    <h2>Avec Socket.IO et Node.js</h2>
-    <div>
-        <button id="roomButton" onclick="toggleRoom()">Joindre une salle</button>
-    </div>
-    <div id="clientId"></div>
-    <textarea id="editor"></textarea>
-
-    <!-- Inclure le fichier JavaScript de CodeMirror -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.1/codemirror.min.js"></script>
-    <!-- Inclure le mode JavaScript pour la coloration syntaxique -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.1/mode/javascript/javascript.min.js"></script>
-
-    <script>
-        var editor = CodeMirror.fromTextArea(document.getElementById("editor"), {
-            lineNumbers: true,
-            mode: "javascript",
-            theme: "material"
-        });
-    
-        var ignoreChangeEvent = false; // On ajoute cette variable pour suivre l'état de l'événement
-    
-        editor.on("change", function () {
-            if (!ignoreChangeEvent) { // On verifie si l'événement doit être ignoré
-                const code = editor.getValue();
-                socket.emit('codeChange', { code: code, roomId: roomId });
-            }
-        });
         
-        socket.on('codeChange', function (data) {
-            if (socket.id !== data.senderId && data.roomId === roomId || !data.roomId) {
-                ignoreChangeEvent = true; // on desactive temporairement la gestion des événements
-                editor.setValue(data.code);
-                ignoreChangeEvent = false; // on reactive la gestion des événements après la mise à jour
+        function askForName() {
+            const name = prompt("Entrez votre nom:");
+            if (name) { 
+                socket.emit('setUsername', name);
             }
+        }
+
+        function addMessage(message) {
+            const messageElement = document.createElement('div');
+            messageElement.textContent = message;
+            document.getElementById('clientId').appendChild(messageElement);
+        }
+
+        require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@latest/min/vs' } });
+        require(['vs/editor/editor.main'], function () {
+            let selectedLanguage = 'javascript'; 
+            editor = monaco.editor.create(document.getElementById('editor'), {
+                value: 'function hello() {\n\tconsole.log("Hello world!");\n }\n hello();',
+                language: selectedLanguage,
+                theme: 'vs-dark'
+            });
+
+            var ignoreChangeEvent = false; 
+
+            editor.onDidChangeModelContent(function () {
+                if (!ignoreChangeEvent) { 
+                    const code = editor.getValue();
+                    socket.emit('codeChange', { code: code, roomId: roomId });
+                }
+            });
+
+            document.getElementById("output").addEventListener("click", compileCode);
+
+            socket.on('codeChange', function (data) {
+                if (socket.id !== data.senderId && data.roomId === roomId || !data.roomId) {
+                    ignoreChangeEvent = true; 
+                    editor.setValue(data.code);
+                    ignoreChangeEvent = false; 
+                }
+            });
+
+            socket.on('connect', function () {
+                askForName(); 
+            });
+
+            socket.on('clientId', function (data) {
+                document.getElementById('clientId').innerText = 'Votre ID: ' + data.id + ' (Nom: ' + data.name + ')';
+            });
+
+            socket.on('userConnected', function (data) {
+                const message = data.name + " s'est connecté !";
+                addMessage(message);
+            });
+
+            socket.on('userDisconnected', function (data) {
+                const message = data.name + " s'est déconnecté !";
+                addMessage(message);
+            });
         });
 
-        socket.on('connect', function() {
-            document.getElementById('clientId').innerText = 'Votre ID: ' + socket.id;
-        });
+        function compileCode() {
+            if (!editor) {
+                console.error('L\'éditeur n\'est pas encore initialisé.');
+                return;
+            }
+
+            const code = editor.getValue(); 
+            const compiledCode = Babel.transform(code, { presets: ['es2015'] }).code;
+
+            try {
+                const consoleOutput = [];
+                const consoleLog = console.log;
+                console.log = function(message) {
+                    consoleOutput.push(message);
+                    consoleLog.apply(console, arguments);
+                };
+
+                eval(compiledCode);
+
+                document.getElementById('output').innerText = 'Résultat de la console : \n' + consoleOutput.join('\n');
+            } catch (error) {
+                console.error('Erreur lors de l\'exécution du code:', error);
+                document.getElementById('output').innerText = 'Erreur lors de l\'exécution du code:\n' + error;
+            }
+        }
+
     </script>
-    
-
+   <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 </body>
 
 </html>
